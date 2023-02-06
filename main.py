@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 def make_pulse(amp, dt, fs=10000, N=10000):
     """
+    :param N:
     :param amp: amplituda pulsu
     :param dt: szerokosc pulsu
     :param fs: czestotliwosc probkowania
@@ -56,6 +57,7 @@ def check_resistane(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     I_f = signal.filtfilt(b, a, I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))], method="gust")
     """
     plt.figure(1)
+    plt.title("Checking")
     f, (ax1, ax2) = plt.subplots(2,1)
     ax1.plot(I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))])
     ax1.plot(I_f)
@@ -98,7 +100,7 @@ def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
 
     I_s = signal.filtfilt(b, a, I, method="gust")
     peaks, _ = signal.find_peaks(I, height=np.mean(I), width=dt * N)
-    print(peaks)
+    #print(peaks)
     t_i = np.arange(start=0, step=1 / fs, stop=len(I_f) * 1 / fs, dtype=np.float64)
     q = np.trapz(x=t_i, y=I_f)
     # print(I_f)
@@ -106,6 +108,7 @@ def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     p_i = np.multiply(U_f, I_f)
     E = np.trapz(x=t_i, y=p_i)
     print(f"q={q},\t E={E}")
+    """
     plt.figure(1)
     plt.plot(I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))])
 
@@ -117,6 +120,7 @@ def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     plt.plot(peaks, I[peaks], "x")
     plt.title("Setting")
     plt.show()
+    """
     return q, E
 
 
@@ -131,7 +135,7 @@ def set_Roff_state(write_task: nidaqmx.Task, writer: stream_writers.AnalogMultiC
 
 def check_state(r):
     """ Checking current state of memristor"""
-    if r <= 4:
+    if r <= 3:
         return "R_on"
     elif r >= 50:
         return "R_off"
@@ -149,7 +153,7 @@ dt_Roff = 0.1
 Amp_On = 1
 Amp_Off = -1.5
 file = f"Programowanie_Ron_wyniki_AmpOn={Amp_On}_dtOn={dt_Ron}_{No_measure}.csv"
-string = "Timestamp,No. pulses, No. Test,R,Succes,dt_Ron,Amp_RonR,q,E_memristor, \n"
+string = "Timestamp,No. pulses, No. Test,R,Succes,dt_Ron,Amp_RonR,q,E_memristor,State\n"
 
 with open(file, "w") as f:
     f.write(string)
@@ -157,7 +161,7 @@ with open(file, "w") as f:
 with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
     task_read.ai_channels.add_ai_voltage_chan("myDAQ1/ai0", "channel1", constants.TerminalConfiguration.DIFF, -5, 5)
     task_read.ai_channels.add_ai_voltage_chan("myDAQ1/ai1", "channel2", constants.TerminalConfiguration.DIFF, -5, 5)
-    task_write.ao_channels.add_ao_voltage_chan("myDAQ1/ao0", 'write_channel', -1.5, 1.5)
+    task_write.ao_channels.add_ao_voltage_chan("myDAQ1/ao0", 'write_channel', -2.5, 2.5)
     task_read.timing.cfg_samp_clk_timing(rate=fs_acq, samps_per_chan=N,
                                          sample_mode=constants.AcquisitionType.FINITE)  # you may not need samps_per_chan
     task_write.timing.cfg_samp_clk_timing(rate=fs_acq, samps_per_chan=N, sample_mode=constants.AcquisitionType.FINITE,
@@ -179,7 +183,7 @@ with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
     E = 0
     while tests <= 100:
 
-        string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Ron}, {Amp_On}, {q},{E}\n"
+        string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Ron}, {Amp_On}, {q},{E},{state}\n"
         with open(file, "a") as f:
             f.write(string)
 
@@ -189,6 +193,8 @@ with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
             set_Roff_state(write_task=task_write, writer=writer, dt=dt_Roff, amp=Amp_Off)
             tests = tests + 1
             pulses = 0
+            E = 0
+            q = 0
 
             # zeroing(task_ write)
         else:
