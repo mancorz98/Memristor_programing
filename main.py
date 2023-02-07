@@ -148,9 +148,9 @@ N = 10000
 # dt = 0.5e-2
 No_measure = 1
 max_pulses = 10
-dt_Ron = 0.01
+dt_Ron = 0.005
 dt_Roff = 0.1
-Amp_On = 1.2
+Amp_On = 1.0
 Amp_Off = -1.5
 file = f"Programowanie_Ron_wyniki_AmpOn={Amp_On}_dtOn={dt_Ron}_{No_measure}.csv"
 string = "Timestamp,No. pulses, No. Test,R,Succes,dt_Ron,Amp_RonR,q,E_memristor,State\n"
