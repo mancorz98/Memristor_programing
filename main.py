@@ -5,7 +5,9 @@ import scipy.signal as signal
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-
+import string as str
+from datetime import datetime
+import os
 
 def make_pulse(amp, dt, fs=10000, N=10000):
     """
@@ -79,7 +81,7 @@ def check_resistane(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
 
 def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
                   writer: stream_writers.AnalogMultiChannelWriter, reader: stream_readers.AnalogMultiChannelReader,
-                  r=4.7, amp=0.15, dt=0.01, fs=10000, N=1000):
+                  r=4.7, amp=0.15, dt=0.01, fs=10000, N=1000, saving=False):
     """ Setting memristor in R_on state"""
     print('Ustawianie')
     writer.write_many_sample(make_pulse(amp, dt, fs=fs, N=N), timeout=-1)
@@ -94,11 +96,10 @@ def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     N = 2
     Wn = 0.1
     b, a = signal.butter(N, Wn, output='ba')
+    filter  = np.logical_not(np.logical_and(U < 0.02, U > -0.02))
+    U_f = signal.filtfilt(b, a, U[filter], method="gust")
+    I_f = signal.filtfilt(b, a, I[filter], method="gust")
 
-    U_f = signal.filtfilt(b, a, U[np.logical_not(np.logical_and(U < 0.02, U > -0.02))], method="gust")
-    I_f = signal.filtfilt(b, a, I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))], method="gust")
-
-    I_s = signal.filtfilt(b, a, I, method="gust")
     peaks, _ = signal.find_peaks(I, height=np.mean(I), width=dt * N)
     #print(peaks)
     t_i = np.arange(start=0, step=1 / fs, stop=len(I_f) * 1 / fs, dtype=np.float64)
@@ -121,6 +122,20 @@ def set_Ron_state(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     plt.title("Setting")
     plt.show()
     """
+
+    if saving:
+        directory = r'.\log'
+        now = datetime.now()
+        date_time = now.strftime("%m_%d_%Y_%H_%M_%S")
+        work_file = date_time+'.csv'
+        file_path = os.path.join(directory,work_file)
+        
+        concat = np.concatenate((t_i.reshape(len(t_i),1), 
+                                 U[filter].reshape(len(t_i),1),
+                                 I[filter].reshape(len(t_i),1)),axis=1)    
+        np.savetxt(file_path, concat, delimiter=',')
+    
+
     return q, E
 
 
@@ -152,6 +167,7 @@ dt_Ron = 0.015
 dt_Roff = 0.1
 Amp_On = 1.2
 Amp_Off = -1.5
+max_tests = 20
 file = f"Programowanie_Ron_wyniki_AmpOn={Amp_On}_dtOn={dt_Ron}_{No_measure}.csv"
 string = "Timestamp,No. pulses, No. Test,R,Succes,dt_Ron,Amp_RonR,q,E_memristor,State\n"
 
@@ -181,7 +197,7 @@ with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
     succ = False
     q = 0
     E = 0
-    while tests <= 100:
+    while tests <= max_tests:
 
         string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Ron}, {Amp_On}, {q},{E},{state}\n"
         with open(file, "a") as f:
@@ -199,7 +215,7 @@ with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
             # zeroing(task_ write)
         else:
             q, E = set_Ron_state(write_task=task_write, read_task=task_read, writer=writer, reader=reader,
-                                 dt=dt_Ron, amp=Amp_On, N=N, fs=fs_acq)
+                                 dt=dt_Ron, amp=Amp_On, N=N, fs=fs_acq,saving=True)
             pulses = pulses + 1
             # zeroing(task_write)
 
@@ -213,3 +229,6 @@ with nidaqmx.Task() as task_write, nidaqmx.Task() as task_read:
             succ = True
         else:
             succ = False
+            
+            
+
