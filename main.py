@@ -55,8 +55,9 @@ def check_resistane(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     Wn = 0.1
     b, a = signal.butter(N, Wn, output='ba')
 
-    U_f = signal.filtfilt(b, a, U[np.logical_not(np.logical_and(U < 0.02, U > -0.02))], method="gust")
-    I_f = signal.filtfilt(b, a, I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))], method="gust")
+    filter = np.logical_not(np.logical_and(U < 0.02, U > -0.02))
+    U_f = signal.filtfilt(b, a, U[filter], method="gust")
+    I_f = signal.filtfilt(b, a, I[filter], method="gust")
     """
     plt.figure(1)
     plt.title("Checking")
@@ -68,8 +69,7 @@ def check_resistane(write_task: nidaqmx.Task, read_task: nidaqmx.Task,
     plt.show()
     """
 
-    R = U[np.logical_not(np.logical_and(U < 0.02, U > -0.02))] / I[
-        (np.logical_not(np.logical_and(U < 0.02, U > -0.02)))]
+    R = U[filter] / I[filter]
 
     R_f = U_f / I_f
     R = R[R > 0]
