@@ -117,7 +117,7 @@ class MemProgrammer:
 
 
 
-    def __set_Ron_state(self, amp=1.0, dt=0.01, saving=False):
+    def __set_Ron_state(self, amp: float=1.0, dt: float=0.01, saving=False):
         """ Setting memristor in R_on state"""
         print(f'Setting R_on state with parameters Amp={amp}, dt={dt}')
 
@@ -245,12 +245,15 @@ class MemProgrammer:
         succ = False
 
         while tests <= max_tests:
+            desired_state = "R_off" if state == "R_on" else "R_on"
+            
+            if desired_state == "R_on":
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
+            else:
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
 
-            string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
             with open(file_path, "a") as f:
                 f.write(string)
-
-            desired_state = "R_off" if state == "R_on" else "R_on"
 
             if desired_state == "R_off" or pulses >= max_pulses:
                 q,E = self.__set_Roff_state(dt=dt_Off, amp=Amp_Off,saving=saving)
@@ -280,3 +283,95 @@ class MemProgrammer:
         self.task_read.close()
         self.task_write.close()
         print("Connection closed")
+        
+        
+    def setting_Roff_measurment(self, n_mem,Amp_On, Amp_Off, dt_On, dt_Off,max_tests, max_pulses, saving=False, directory="Programowanie_Roff_wyniki"):
+
+        fs_acq = self.fs_acq  # sample frequency
+        N = self.N  # number of samples
+        # dt = 0.5e-2
+        if  not os.path.exists(directory):
+            os.mkdir(directory)
+
+        file = f"Programowanie_Roff_wyniki_AmpOff={Amp_Off}_dtOff={dt_Off}_memNumber{n_mem}.csv"
+        file_path = os.path.join(directory,file)
+
+        string = "Timestamp,No. pulses,No. Test,R,Succes,dt_Ron,Amp_RonR,q,E_memristor,State\n"
+
+        with open(file_path, "w") as f:
+            f.write(string)
+
+
+        q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On,saving=saving)
+        R = self.__check_resistane()
+        state = self.__check_state(R)
+
+        tests = 0
+        pulses = 0
+        succ = False
+
+        while tests <= max_tests:
+            
+            desired_state = "R_on" if state == "R_off" else "R_off"
+            
+            if desired_state == "R_off":
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
+            else:
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
+                
+                
+            with open(file_path, "a") as f:
+                f.write(string)
+
+            if desired_state == "R_on" or pulses >= max_pulses:
+                q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On,saving=saving)
+                tests += 1
+                pulses = 0
+
+                        # zeroing(task_ write)
+            else:
+                q, E = self.__set_Roff_state(dt=dt_Off, amp=Amp_Off,saving=saving)
+                pulses = pulses + 1
+                # zeroing(task_write)
+
+            R = self.__check_resistane()
+            state = self.__check_state(R)
+            # zeroing(task_write)
+
+            print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}")
+            if desired_state == "R_off" and desired_state == state:
+                succ = True
+            else:
+                succ = False
+
+    def setting_Ron_once(self,dt_On=0.1, Amp_On: float= 1.5,saving=False):
+        q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On ,saving=saving)
+        R = self.__check_resistane()
+        state = self.__check_state(R)
+        return R, state
+    
+    def check_resistane(self, amp=0.15, dt=0.01):
+        ''' Check if the resistance is within a certain range.'''
+        print("Checking resistance")
+
+        U,I,U_f,I_f = self.__writing_and_reading(amp=amp, dt=dt)
+
+        """
+        plt.figure(1)
+        plt.title("Checking")
+        f, (ax1, ax2) = plt.subplots(2,1)
+        ax1.plot(I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))])
+        ax1.plot(I_f)
+        ax2.plot(U)
+        ax2.plot(I)
+        plt.show()
+        """
+
+        R = U/I
+
+        R_f = U_f / I_f
+        R = R[R > 0]
+        R_f = R_f[R_f > 0]
+        print(f"R={np.mean(R)}, R_f={np.mean(R_f)}")
+
+        return np.mean(R_f)
