@@ -9,6 +9,7 @@ import string as str
 from datetime import datetime
 import os
 
+
 class MemProgrammer:
 
 
@@ -35,7 +36,7 @@ class MemProgrammer:
         self.N = N
         self.r = r
         self.limit = states_limit
-
+  
     def __make_pulse(self,amp, dt):
         """
         :param N: number of samples
@@ -309,40 +310,38 @@ class MemProgrammer:
         tests = 0
         pulses = 0
         succ = False
-
-        while tests <= max_tests:
-            
-            desired_state = "R_on" if state == "R_off" else "R_off"
-            
-            if desired_state == "R_off":
-                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
-            else:
-                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
+        with open(file_path, "a") as f:
+            while tests <= max_tests:
                 
+                desired_state = "R_on" if state == "R_off" else "R_off"
                 
-            with open(file_path, "a") as f:
+                if desired_state == "R_off":
+                    string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
+                else:
+                    string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
+                
                 f.write(string)
 
-            if desired_state == "R_on" or pulses >= max_pulses:
-                q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On,saving=saving)
-                tests += 1
-                pulses = 0
+                if desired_state == "R_on" or pulses >= max_pulses:
+                    q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On,saving=saving)
+                    tests += 1
+                    pulses = 0
 
-                        # zeroing(task_ write)
-            else:
-                q, E = self.__set_Roff_state(dt=dt_Off, amp=Amp_Off,saving=saving)
-                pulses = pulses + 1
+                            # zeroing(task_ write)
+                else:
+                    q, E = self.__set_Roff_state(dt=dt_Off, amp=Amp_Off,saving=saving)
+                    pulses = pulses + 1
+                    # zeroing(task_write)
+
+                R = self.__check_resistane()
+                state = self.__check_state(R)
                 # zeroing(task_write)
 
-            R = self.__check_resistane()
-            state = self.__check_state(R)
-            # zeroing(task_write)
-
-            print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}")
-            if desired_state == "R_off" and desired_state == state:
-                succ = True
-            else:
-                succ = False
+                print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}")
+                if desired_state == "R_off" and desired_state == state:
+                    succ = True
+                else:
+                    succ = False
 
     def setting_Ron_once(self,dt_On=0.1, Amp_On: float= 1.5,saving=False):
         q,E = self.__set_Ron_state(dt=dt_On, amp=Amp_On ,saving=saving)
@@ -352,26 +351,38 @@ class MemProgrammer:
     
     def check_resistane(self, amp=0.15, dt=0.01):
         ''' Check if the resistance is within a certain range.'''
-        print("Checking resistance")
+        return self.__check_resistane(amp=amp, dt=dt)
 
-        U,I,U_f,I_f = self.__writing_and_reading(amp=amp, dt=dt)
+    def __spinwait_us(self,delay):
+        target = time.perf_counter_ns() + delay * 1e9
+        while time.perf_counter_ns() < target:
+            pass
 
-        """
-        plt.figure(1)
-        plt.title("Checking")
-        f, (ax1, ax2) = plt.subplots(2,1)
-        ax1.plot(I[(np.logical_not(np.logical_and(U < 0.02, U > -0.02)))])
-        ax1.plot(I_f)
-        ax2.plot(U)
-        ax2.plot(I)
-        plt.show()
-        """
+    def check_retention(self, n_mem, delays=30, time_of_test=3600):
+        R = self.__check_resistane(amp=0.15, dt=0.01)
+        directory = "Retentions_test"
 
-        R = U/I
+        if os.path.exists(directory) == False:
+            os.mkdir(directory)
 
-        R_f = U_f / I_f
-        R = R[R > 0]
-        R_f = R_f[R_f > 0]
-        print(f"R={np.mean(R)}, R_f={np.mean(R_f)}")
+        file  = f"mem{n_mem}_retention_test.csv"
+        file_path = os.path.join(directory,file)
+        string = "time,R\n"
 
-        return np.mean(R_f)
+        with open(file_path, "w") as f:
+            f.write(string)
+
+        while R >= 2:
+            R, state =  self.setting_Ron_once(dt_On=0.1, Amp_On=1.5,saving=False)
+        print(f"R ={R} kOhm is set ")
+
+        start = time.perf_counter_ns()
+        target = time.perf_counter_ns() + time_of_test * 1e9
+
+        with open(file_path, "a") as fp:
+            while time.perf_counter_ns() <= target:
+                R = self.__check_resistane(amp=0.15, dt=0.01)
+                string = f"{(time.perf_counter_ns()-start)/1e9}, {R}\n"
+                fp.write(string)
+                self.__spinwait_us(delay=delays)
+

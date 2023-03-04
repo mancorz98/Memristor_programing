@@ -12,6 +12,7 @@ from MemProgrammer import *
 
 
 programmer = MemProgrammer(device_name = "myDAQ1",fs_acq=10000. , N = 10000,r = 4.7, states_limit= (4, 50))
+#programmer.setting_Ron_once()
 R = programmer.check_resistane()
 print(R)
 #print(state)
