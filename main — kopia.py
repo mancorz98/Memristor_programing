@@ -11,7 +11,7 @@ import os
 from MemProgrammer import *
 
 
-programmer = MemProgrammer(device_name = "myDAQ1",fs_acq=10000. , N = 10000,r = 5.11, states_limit= (6, 10))
-programmer.setting_Ron_measurment(n_mem=1,Amp_On=1, Amp_Off=-2.5, dt_On=0.01, dt_Off=0.5,
+programmer = MemProgrammer(device_name = "myDAQ1",fs_acq=10000. , N = 10000,r = 4.7, states_limit= (4, 50))
+programmer.setting_Roff_measurment(n_mem=2,Amp_On=1.5, Amp_Off=-1, dt_On=0.1, dt_Off=0.01,
                                     max_tests=100, max_pulses=10, saving=False)
 programmer.closing()

@@ -70,26 +70,32 @@ class MemProgrammer:
         self.task_write.stop()
         U = buffer[0,:]
         I = buffer[1,:] / r
-        filter = np.logical_not(np.logical_and(U < 0.02, U > -0.02))
-        """
-        plt.figure(2)
+        filter = np.logical_not(np.logical_and(U < 0.01, U > -0.01))
+        
+        '''plt.figure(2)
         plt.title("Setting")
-        plt.plot(U)
-        plt.plot(I)
+        plt.plot(U,label='Napięcie')
+        plt.plot(I, label='Prąd')
+        plt.legend()
         plt.show()
-        """
+        '''
+        
+        
         U = U[filter]
         I = I[filter]
         U[-1] = U[-2]
         I[-1] = I[-2]
         U_f = signal.savgol_filter(U, 31, 3)
         I_f = signal.savgol_filter(I, 31, 3)
+        
+
+        
 
         return U, I, U_f, I_f
 
 
 
-    def __check_resistane(self, amp=0.15, dt=0.01):
+    def __check_resistane(self, amp=0.2, dt=0.01):
         ''' Check if the resistance is within a certain range.'''
         print("Checking resistance")
 
@@ -244,10 +250,13 @@ class MemProgrammer:
         tests = 0
         pulses = 0
         succ = False
-
-        while tests <= max_tests:
-            desired_state = "R_off" if state == "R_on" else "R_on"
-            
+        
+        desired_state = "R_on" if state == "R_off" else "R_off"
+        
+        while tests <= max_tests-1:
+           
+           
+               
             if desired_state == "R_on":
                 string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
             else:
@@ -258,24 +267,44 @@ class MemProgrammer:
 
             if desired_state == "R_off" or pulses >= max_pulses:
                 q,E = self.__set_Roff_state(dt=dt_Off, amp=Amp_Off,saving=saving)
-                tests += 1
                 pulses = 0
-
+                succ = False
+                R = self.__check_resistane()
+                state = self.__check_state(R)
+                print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}, puls nr: {pulses}")
+                if state == "R_off":
+                    desired_state = "R_on"
+                    tests += 1
+                else:
+                    desired_state = "R_off"
+                    
                         # zeroing(task_ write)
             else:
                 q, E = self.__set_Ron_state(dt=dt_On, amp=Amp_On,saving=saving)
                 pulses = pulses + 1
+                R = self.__check_resistane()
+                state = self.__check_state(R)
+                print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}, puls nr: {pulses}")
+                
+                if  desired_state == state:
+                    succ = True
+                else:
+                    succ = False
+                
+                
+                if state == "R_on":
+                        desired_state = "R_off"
+                else:
+                        desired_state = "R_on"
+                        
+                
                 # zeroing(task_write)
 
-            R = self.__check_resistane()
-            state = self.__check_state(R)
+            
             # zeroing(task_write)
 
-            print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}")
-            if desired_state == "R_on" and desired_state == state:
-                succ = True
-            else:
-                succ = False
+           
+
 
     def closing(self):
         """ Closing the connection to the device"""
