@@ -21,7 +21,7 @@ class MemProgrammer:
                                                         constants.TerminalConfiguration.DIFF,
                                                         -5, 5,)
         self.task_read.ai_channels.add_ai_voltage_chan(f"{device_name}/ai1", "channel2", constants.TerminalConfiguration.DIFF, -5, 5)
-        self.task_write.ao_channels.add_ao_voltage_chan(f"{device_name}/ao0", 'write_channel', -2.5, 2.5)
+        self.task_write.ao_channels.add_ao_voltage_chan(f"{device_name}/ao0", 'write_channel', -3, 3)
 
         self.task_read.timing.cfg_samp_clk_timing(rate=fs_acq, samps_per_chan=N,sample_mode=constants.AcquisitionType.FINITE)  # you may not need samps_per_chan
 
@@ -69,33 +69,45 @@ class MemProgrammer:
         self.task_write.wait_until_done()
         self.task_write.stop()
         U = buffer[0,:]
+        U_r = buffer[1,:]
         I = buffer[1,:] / r
-        filter = np.logical_not(np.logical_and(U < 0.01, U > -0.01))
+        filter_m = np.logical_not(np.logical_and(U < 0.03, U > -0.03))
+        filter_r = np.logical_not(np.logical_and(U_r < 0.03, U_r > -0.03))
         
-        '''plt.figure(2)
+        if len(U_r[filter_r]) > len(U[filter_m]):
+            filter = filter_r
+            U = U[filter]
+            I = I[filter]
+            U[0] = U[1]
+            I[0] = I[1]
+            U[-1] = U[-2]
+            I[-1] = I[-2]
+        else:
+            filter = filter_m
+            U = U[filter]
+            I = I[filter]
+            U[-1] = U[-2]
+            I[-1] = I[-2]
+            U[0] = U[1]
+            I[0] = I[1]
+
+        U_f = signal.savgol_filter(U, 31, 3)
+        I_f = signal.savgol_filter(I, 31, 3)
+
+        '''
+        plt.figure(2)
         plt.title("Setting")
-        plt.plot(U,label='Napięcie')
-        plt.plot(I, label='Prąd')
+        plt.plot(U_f,label='Napięcie')
+        plt.plot(I_f, label='Prąd')
         plt.legend()
         plt.show()
         '''
-        
-        
-        U = U[filter]
-        I = I[filter]
-        U[-1] = U[-2]
-        I[-1] = I[-2]
-        U_f = signal.savgol_filter(U, 31, 3)
-        I_f = signal.savgol_filter(I, 31, 3)
-        
-
-        
 
         return U, I, U_f, I_f
 
 
 
-    def __check_resistane(self, amp=0.2, dt=0.01):
+    def __check_resistane(self, amp=0.15, dt=0.01):
         ''' Check if the resistance is within a certain range.'''
         print("Checking resistance")
 
@@ -176,8 +188,8 @@ class MemProgrammer:
         work_file = date_time+'.csv'
         file_path = os.path.join(directory,work_file)
         concat = np.concatenate((t_i.reshape(len(t_i),1),
-                                    U[filter].reshape(len(t_i),1),
-                                    I[filter].reshape(len(t_i),1)),axis=1)
+                                    U.reshape(len(t_i),1),
+                                    I.reshape(len(t_i),1)),axis=1)
         np.savetxt(file_path, concat, delimiter=',')
 
 
@@ -252,15 +264,8 @@ class MemProgrammer:
         succ = False
         
         desired_state = "R_on" if state == "R_off" else "R_off"
-        
+        string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
         while tests <= max_tests-1:
-           
-           
-               
-            if desired_state == "R_on":
-                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
-            else:
-                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
 
             with open(file_path, "a") as f:
                 f.write(string)
@@ -271,12 +276,14 @@ class MemProgrammer:
                 succ = False
                 R = self.__check_resistane()
                 state = self.__check_state(R)
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_Off}, {Amp_Off}, {q},{E},{state}\n"
                 print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}, puls nr: {pulses}")
                 if state == "R_off":
                     desired_state = "R_on"
                     tests += 1
                 else:
                     desired_state = "R_off"
+                    _, _ = self.__set_Ron_state(dt=0.1, amp=1.5,saving=saving)
                     
                         # zeroing(task_ write)
             else:
@@ -284,14 +291,15 @@ class MemProgrammer:
                 pulses = pulses + 1
                 R = self.__check_resistane()
                 state = self.__check_state(R)
-                print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}, puls nr: {pulses}")
+                
+                
                 
                 if  desired_state == state:
                     succ = True
                 else:
                     succ = False
-                
-                
+                string = f"{time.time()}, {pulses}, {tests}, {R},{succ}, {dt_On}, {Amp_On}, {q},{E},{state}\n"
+                print(f"Oczekiwany stan: {desired_state} - Otrzymany stan: {state} , R={R}, puls nr: {pulses}")
                 if state == "R_on":
                         desired_state = "R_off"
                 else:
@@ -415,3 +423,37 @@ class MemProgrammer:
                 fp.write(string)
                 self.__spinwait_us(delay=delays)
 
+    def __check_3_state(self,r, ranges: tuple):
+        """ Checking current state of memristor"""
+        if r <= ranges[0]:
+            return 0
+        elif       ranges[1][0] <= r <=  ranges[1][1]:
+            return 1
+        elif r >=  ranges[2]:
+            return 2
+        else:
+            return np.NAN
+        
+    def set_3_states(self, desired_state, dts: iter, amps: iter, ranges) -> bool:
+        R = self.__check_resistane()
+        state = self.__check_3_state(R,ranges)
+        count = 0
+        
+        while state != desired_state:
+            if desired_state == 0:
+                q,E = self.__set_Ron_state(dt=dts[0], amp=amps[0] ,saving=False)
+            elif desired_state == 1:
+                q,E = self.__set_Ron_state(dt=dts[1], amp=amps[1] ,saving=False)
+            else:
+                q,E = self.__set_Roff_state(dt=dts[2], amp=amps[2] ,saving=False)
+            
+            R = self.__check_resistane()
+            state = self.__check_3_state(R,ranges)
+            
+            count += 1
+            print(f'Count = {count}')
+            
+            if desired_state != state:
+                q,E = self.__set_Roff_state(dt=dts[2], amp=amps[2] ,saving=False)
+        
+        return True
